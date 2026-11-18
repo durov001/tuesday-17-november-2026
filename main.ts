@@ -1,23 +1,35 @@
-import { copyFileSync, mkdirSync } from "node:fs";
+// news-image-20261117 (v3) entrypoint.
+// Copies the entry image, entry.png, from this repository's root into the
+// output directory the harness provides via MAKEFUN_OUTPUT_DIR.
+// Node 22, standard library only, no network, fully deterministic:
+// the output is a byte-for-byte copy of the input image.
+import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The entry image is rendered outside this program. This entrypoint
-// only copies it into the output directory the judge reads from,
-// so the result is byte-identical on every run.
-function main(): void {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const outDir = process.env.MAKEFUN_OUTPUT_DIR || "/output";
+const here = dirname(fileURLToPath(import.meta.url));
+const source = join(here, "entry.png");
+const outDir = process.env.MAKEFUN_OUTPUT_DIR;
 
-  const src = join(here, "entry.png");
-  const dest = join(outDir, "entry.png");
-
-  mkdirSync(outDir, { recursive: true });
-  try {
-    copyFileSync(src, dest);
-  } catch (err) {
-    throw new Error(`failed to copy ${src} to ${dest}: ${err}`);
-  }
+if (!outDir) {
+  console.error("error: MAKEFUN_OUTPUT_DIR is not set");
+  process.exit(1);
 }
 
-main();
+if (!existsSync(source)) {
+  console.error(`error: entry.png not found at ${source}`);
+  process.exit(1);
+}
+
+mkdirSync(outDir, { recursive: true });
+const dest = join(outDir, "entry.png");
+copyFileSync(source, dest);
+
+// Verify the copy landed whole: sizes must match, or fail loudly.
+const inBytes = statSync(source).size;
+const outBytes = statSync(dest).size;
+if (inBytes !== outBytes) {
+  console.error(`error: copy incomplete (${outBytes} of ${inBytes} bytes)`);
+  process.exit(1);
+}
+console.log(`entry.png copied to ${dest} (${outBytes} bytes)`);
